@@ -1,10 +1,4 @@
 # ✍️ ShoiliChinno — Personal Writing Style Fingerprinting
-
-**"শৈলীচিহ্ন" (Shoili Chinno) — "Style Mark/Signature"**
-
-An end-to-end NLP system that identifies **who wrote a piece of text based on how they write**, not what they write about. Combines classical stylometry (punctuation habits, function-word frequency, sentence structure, readability) with modern transformer embeddings to perform **author attribution** and **author verification**, wrapped in a full interactive Streamlit dashboard.
-
----
 <!-- Top Banner / Title -->
 <h1 align="center">✍️ ShoiliChinno</h1>
 <p align="center">
@@ -22,18 +16,11 @@ An end-to-end NLP system that identifies **who wrote a piece of text based on ho
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
 </p>
 
+**"শৈলীচিহ্ন" (Shoili Chinno) — "Style Mark/Signature"**
+
+An end-to-end NLP system that identifies **who wrote a piece of text based on how they write**, not what they write about. Combines classical stylometry (punctuation habits, function-word frequency, sentence structure, readability) with modern transformer embeddings to perform **author attribution** and **author verification**, wrapped in a full interactive Streamlit dashboard.
+
 ---
-
-## 🚀 Quick Start (TL;DR)
-
-Get the app running in **under 2 minutes**:
-
-```bash
-# 1. Install dependencies
-pip install -r requirements.txt
-
-# 2. Launch the Streamlit dashboard
-streamlit run app.py
 
 ## ✨ Features
 
