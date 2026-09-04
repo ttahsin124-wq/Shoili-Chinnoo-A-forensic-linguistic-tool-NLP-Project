@@ -5,6 +5,35 @@
 An end-to-end NLP system that identifies **who wrote a piece of text based on how they write**, not what they write about. Combines classical stylometry (punctuation habits, function-word frequency, sentence structure, readability) with modern transformer embeddings to perform **author attribution** and **author verification**, wrapped in a full interactive Streamlit dashboard.
 
 ---
+<!-- Top Banner / Title -->
+<h1 align="center">✍️ ShoiliChinno</h1>
+<p align="center">
+  <strong>শৈলীচিহ্ন</strong> — <em>"The Signature of Your Style"</em>
+</p>
+<p align="center">
+  An end-to-end NLP system that identifies <strong>who</strong> wrote a text based entirely on <strong>how</strong> they write — not what they say.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge&logo=python" alt="Python">
+  <img src="https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white" alt="Streamlit">
+  <img src="https://img.shields.io/badge/scikit--learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white" alt="Scikit-Learn">
+  <img src="https://img.shields.io/badge/Sentence--BERT-0A0A0A?style=for-the-badge&logo=huggingface&logoColor=FFD21E" alt="SBERT">
+  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
+</p>
+
+---
+
+## 🚀 Quick Start (TL;DR)
+
+Get the app running in **under 2 minutes**:
+
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Launch the Streamlit dashboard
+streamlit run app.py
 
 ## ✨ Features
 
@@ -62,16 +91,7 @@ Raw Articles (Reuters 50-50 dataset)
         ▼
  ⑪ Streamlit App ─── interactive UI wrapping the entire trained pipeline
 ```
-graph LR
-    A[📚 Raw Reuters Articles] --> B[✂️ Chunk into 150-word overlapping slices];
-    B --> C[📊 Extract 100+ Stylometric Features];
-    C --> D[🧠 Encode with Sentence-BERT];
-    D --> E[🤖 Feature Selection + Concatenation];
-    E --> F[⚙️ GridSearchCV Training];
-    F --> G[📈 Evaluate & Tune Threshold];
-    G --> H[🚀 Deploy via Streamlit];
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style H fill:#0f0,stroke:#333,stroke-width:2px
+
 ---
 
 ## 📊 Model Performance
