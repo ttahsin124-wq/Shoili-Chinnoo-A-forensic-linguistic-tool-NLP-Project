@@ -62,7 +62,16 @@ Raw Articles (Reuters 50-50 dataset)
         ▼
  ⑪ Streamlit App ─── interactive UI wrapping the entire trained pipeline
 ```
-
+graph LR
+    A[📚 Raw Reuters Articles] --> B[✂️ Chunk into 150-word overlapping slices];
+    B --> C[📊 Extract 100+ Stylometric Features];
+    C --> D[🧠 Encode with Sentence-BERT];
+    D --> E[🤖 Feature Selection + Concatenation];
+    E --> F[⚙️ GridSearchCV Training];
+    F --> G[📈 Evaluate & Tune Threshold];
+    G --> H[🚀 Deploy via Streamlit];
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style H fill:#0f0,stroke:#333,stroke-width:2px
 ---
 
 ## 📊 Model Performance
