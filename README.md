@@ -276,7 +276,7 @@ Combined with **384-dimensional Sentence-BERT embeddings** for semantic/subtle s
 
 ## 📄 License
 
-This project currently has no explicit license. Add a `LICENSE` file (MIT, Apache 2.0, etc.) before sharing or distributing.
+This project is licensed under the MIT License — free to use, modify, and distribute, with attribution.
 
 ---
 
