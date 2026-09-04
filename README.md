@@ -121,7 +121,7 @@ shoilichinno/
 ```
 ##UI Screenshots:
 <div align="center">
-  <img src="Screenshot 2026-09-04 121342.png" alt="Predicting Author " width="700"/>
+  <img src="Screenshot 2026-09-04 121342.png"  width="700"/>
   <br>  
 </div>
 ---
