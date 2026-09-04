@@ -100,24 +100,31 @@ Evaluated on the full 50-author Reuters benchmark (50 authors, 2,500 test chunks
 ## 📁 Project Structure
 
 ```
-shoilichinno/
-├── app.py                              # Streamlit UI (attribution, verification, profiling, batch)
-├── requirements.txt                    # Python dependencies for the app
-├── SETUP.md                            # App setup & run instructions
+Shoilichinno/
+├── app.py                              # 🎨 Streamlit interactive dashboard
+├── requirements.txt                    # 📦 Python dependencies
+├── reuters_50_50.csv                   # 📄 Consolidated Reuters dataset
+├── Shoilichinno.ipynb                  # 📓 Main training & evaluation notebook
 │
-├── load_reuters_dataset.py             # Script: consolidates raw C50train/C50test → one CSV
-├── reuters_50_50.csv                   # Consolidated dataset (5,000 articles, 50 authors)
+├── pipelines_config.json               # ⚙️ Pipeline config (v1)
+├── pipelines_config_v2.joblib          # ⚙️ Pipeline config (v2 - tuned)
 │
-├── writing_style_fingerprinting.ipynb     # v1: baseline pipeline notebook
-├── writing_style_fingerprinting_v2.ipynb  # v2: tuned pipeline (baselines, GridSearchCV, feature selection)
-├── ShoiliChinno_fixed.ipynb               # Final consolidated & bug-fixed notebook
+├── author_attribution_model.joblib     # 🤖 Trained classifier (v1)
+├── author_attribution_model_v2.joblib  # 🤖 Trained classifier (v2 - best)
+├── author_label_encoder.joblib         # 🏷️ Author name ↔ class index (v1)
+├── author_label_encoder_v2.joblib      # 🏷️ Author name ↔ class index (v2)
+├── style_feature_selector.joblib       # 🔍 SelectKBest feature selector (v1)
+├── style_feature_selector_v2.joblib    # 🔍 SelectKBest feature selector (v2)
+├── style_scaler.joblib                 # 📊 Fitted StandardScaler (v1)
+├── style_scaler_v2.joblib              # 📊 Fitted StandardScaler (v2)
 │
-└── (generated after running the notebook)
-    ├── stylo_scaler.joblib              # Fitted StandardScaler for stylometric features
-    ├── stylo_feature_selector.joblib    # Fitted SelectKBest feature selector
-    ├── author_label_encoder.joblib      # LabelEncoder mapping author names ↔ class indices
-    ├── author_attribution_model.joblib  # Trained best classifier (Logistic Reg / SVM / RF)
-    └── pipeline_config.json             # Config: embedding model, chunk size, threshold, etc.
+└── .venv/                              # 🐍 Virtual environment (ignored by Git)
+    ├── Include/
+    ├── Lib/
+    ├── Scripts/
+    ├── share/
+    ├── .gitignore
+    └── pyvenv.cfg
 ```
 ## 📸 Live Demo Preview:
 <div align="center">
