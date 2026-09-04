@@ -137,8 +137,22 @@ shoilichinno/
   <img src="Screenshot 2026-09-04 121710.png" alt="Verification" width="32%"/>
   <img src="Screenshot 2026-09-04 121758.png" alt="Profiling" width="32%"/>
   <br>
-  <em>Figure 1: Stylometric Profile (Left) |   Analyzing Profile (Center) | Full Feature Breaddown (Right)</em>
+  <em> Stylometric Profile (Left) |   Analyzing Profile (Center) | Full Feature Breaddown (Right)</em>
 </div>
+<div align="center">
+  <img src="Screenshot 2026-09-04 121931.png" alt="Attribution" width="400"/>
+  <img src="Screenshot 2026-09-04 121948.png" alt="Verification" width="400"/>
+  <br>
+  <em>Left: Batch Analysis| Right: Breakdown </em>
+</div>
+<div align="center">
+  <img src="Screenshot 2026-09-04 122007.png" alt="Attribution" width="400"/>
+  <img src="Screenshot 2026-09-04 122034.png" alt="Verification" width="400"/>
+  <br>
+  <em>Left: About Section | Right: Details </em>
+</div>
+
+
 
 ---
 
