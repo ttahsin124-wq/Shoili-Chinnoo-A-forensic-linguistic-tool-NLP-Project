@@ -119,7 +119,7 @@ shoilichinno/
     ├── author_attribution_model.joblib  # Trained best classifier (Logistic Reg / SVM / RF)
     └── pipeline_config.json             # Config: embedding model, chunk size, threshold, etc.
 ```
-## 📸 Live Demo Preview:Screenshot 2026-09-04 121412.png
+## 📸 Live Demo Preview:
 <div align="center">
   <img src="Screenshot 2026-09-04 121342.png" alt="Attribution" width="400"/>
   <img src="Screenshot 2026-09-04 121305.png" alt="Verification" width="400"/>
