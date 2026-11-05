@@ -18,7 +18,7 @@
 
 **"শৈলীচিহ্ন" (Shoili Chinno) — "Style Mark/Signature"**
 
-An end-to-end NLP system that identifies **who wrote a piece of text based on how they write**, not what they write about. Combines classical stylometry (punctuation habits, function-word frequency, sentence structure, readability) with modern transformer embeddings to perform **author attribution** and **author verification**, wrapped in a full interactive Streamlit dashboard.
+An end-to-end NLP system that identifies **who wrote a piece of text based on how they write**, not what they write about. Combines classical stylometry (punctuation habits, function-word frequency, sentence structure, readability) with modern transformer embeddings to perform **author attribution**, **author verification**, **unknown-author detection** and **style-change detection**, wrapped in a full interactive Streamlit dashboard.
 
 ---
 
@@ -26,10 +26,12 @@ An end-to-end NLP system that identifies **who wrote a piece of text based on ho
 
 | Feature | Description |
 |---|---|
-| 🔮 **Author Attribution** | Given a piece of text, ranks the most likely author out of all known writers in the dataset, with confidence scores |
+| 🔮 **Author Attribution** | Given a piece of text, ranks the most likely author out of all known writers in the dataset. Long texts are split into the same 150-word chunks the model was trained on and the chunk predictions are averaged |
+| ❓ **Unknown-Author Detection** | Instead of always forcing a guess, the app answers **"no confident match"** when no known author fits strongly enough, and **"outside what the model knows"** when the text is unlike the news writing it was trained on (blogs, fiction, email…). Adjustable strictness slider |
+| 🧭 **Style-Change Timeline** | For longer texts, shows which author each chunk resembles and flags points where the writing style shifts sharply — a lead for mixed authorship or an inserted passage |
 | 🔍 **Author Verification** | Given two texts, estimates whether they were written by the same person using cosine similarity on style embeddings |
 | 🧬 **Stylometric Profiling** | Standalone inspection tool — extracts and visualizes a text's punctuation habits, function-word usage, POS balance, readability scores, and vocabulary richness, independent of the classifier |
-| 📂 **Batch Analysis** | Upload a CSV of many texts and get predictions for all of them at once, with optional accuracy scoring against known labels and CSV export |
+| 📂 **Batch Analysis** | Upload a CSV of many texts and get predictions for all of them at once, with the known-author check per row, optional accuracy scoring against known labels and CSV export |
 | 📊 **Model Dashboard** | Live view of model type, test accuracy, document-level accuracy, embedding model, and all known authors |
 | 🎨 **Polished Dark UI** | Custom-styled Streamlit dashboard with gauges, bar charts, donut charts, and verdict cards |
 
@@ -76,24 +78,59 @@ Raw Articles (Reuters 50-50 dataset)
  ⑩ Save Pipeline ─── scaler, selector, label encoder, model, config → .joblib / .json
         │
         ▼
- ⑪ Streamlit App ─── interactive UI wrapping the entire trained pipeline
+ ⑪ Calibrate ─── style-change threshold + unknown-author thresholds, measured on held-out test articles
+        │
+        ▼
+ ⑫ Streamlit App ─── interactive UI wrapping the entire trained pipeline
+```
+
+### What happens when you paste a text into the app
+
+```
+Text ──► split into 150-word chunks (40-word overlap, same as training)
+           │
+           ├─► features + embeddings per chunk ──► author probabilities per chunk
+           │                                            │
+           │                     ┌──────────────────────┼─────────────────────────┐
+           │                     ▼                      ▼                         ▼
+           │            average over chunks    shift between neighbouring    domain check:
+           │            → author ranking       chunks (Jensen–Shannon)       does this look like
+           │                     │             → style-change timeline       the training data?
+           │                     ▼                                                │
+           │            top probability ≥ threshold? ◄────────────────────────────┘
+           ▼
+   ✅ Top match   |   ❓ No confident match   |   🌐 Outside what the model knows
 ```
 
 ---
 
 ## 📊 Model Performance
 
-Evaluated on the full 50-author Reuters benchmark (50 authors, 2,500 test chunks):
+Evaluated on the full 50-author Reuters benchmark (50 authors, held-out test articles). The shipped model is **Logistic Regression** (C=10):
 
 | Metric | Score |
 |---|---|
-| Random-guess baseline | ~2.0% |
-| Majority-class baseline | ~2.3% |
-| **Chunk-level test accuracy (Linear SVM)** | **~57.3%** |
-| **Document-level accuracy (majority vote)** | **~63.7%** |
-| Improvement over random guessing | **~27.6x** |
+| Random-guess baseline | ~1.9% |
+| **Chunk-level test accuracy** | **~56.7%** |
+| **Document-level accuracy (notebook, majority vote over chunks)** | **~65.0%** |
+| **Document-level accuracy (app, averaged chunk probabilities)** | **~67.7%** |
+| Same model, whole article as one input (old app behaviour) | ~61.3% |
 
-> A 50-way classification task is genuinely hard — for reference, published academic baselines on this exact dataset typically fall in the 70–85% range with heavy tuning. ~57–64% with classical ML + embeddings is a strong, honest result, not a failure. Some authors (e.g. those with very distinctive style) score 90%+ individually; others with more generic writing score lower — see the confusion matrix in the notebook for the full breakdown.
+> The last three rows were measured with the app's own code on 400 randomly sampled test articles; the first rows come from `pipeline_config.json`. A 50-way classification task is genuinely hard — ~57–68% with classical ML + embeddings is a strong, honest result. Some authors with distinctive style score 90%+ individually; others with more generic writing score lower — see the confusion matrix in the notebook.
+
+### Unknown-author & style-change detection
+
+All thresholds are measured on held-out Reuters test articles, never guessed. The scripts `calibrate_open_set.py` and `calibrate_style_shift.py` reproduce them.
+
+| Check | Result |
+|---|---|
+| **Domain check** — real Reuters articles wrongly flagged as "outside what the model knows" | 2% |
+| **Unknown news author** — texts by authors hidden from a retrained model that get "no confident match" (default strictness) | 37% |
+| Accuracy of answers that pass the known-author check (default strictness) | 77% (vs 70% with no check) |
+| **Style change** — two-author spliced documents caught | 81% |
+| Style change — single-author documents wrongly flagged | 14% |
+
+> Unknown-author detection was simulated by retraining the model with 10 of the 50 authors held out (5 folds) and checking whether their articles were rejected. Catching an unseen *news* writer is the hardest case, because they share the same house style; clearly non-news text (blogs, fiction, email, academic prose) is caught by the domain check.
 
 ---
 
@@ -102,29 +139,31 @@ Evaluated on the full 50-author Reuters benchmark (50 authors, 2,500 test chunks
 ```
 Shoilichinno/
 ├── app.py                              # 🎨 Streamlit interactive dashboard
+├── pipeline.py                         # 🧠 Core logic: features, chunking, prediction, style shift, domain check
 ├── requirements.txt                    # 📦 Python dependencies
 ├── reuters_50_50.csv                   # 📄 Consolidated Reuters dataset
-├── Shoilichinno.ipynb                  # 📓 Main training & evaluation notebook
+├── ShoiliChinno.ipynb                  # 📓 Main training & evaluation notebook
 │
-├── pipelines_config.json               # ⚙️ Pipeline config (v1)
-├── pipelines_config_v2.joblib          # ⚙️ Pipeline config (v2 - tuned)
+├── calibrate_style_shift.py            # 📏 Calibrates the style-change threshold
+├── calibrate_open_set.py               # 📏 Calibrates unknown-author + domain checks
+├── style_shift_calibration.json        # ⚙️ Output of calibrate_style_shift.py
+├── open_set_calibration.json           # ⚙️ Output of calibrate_open_set.py
+├── domain_centroids.npy                # ⚙️ Per-author embedding centroids for the domain check
 │
-├── author_attribution_model.joblib     # 🤖 Trained classifier (v1)
-├── author_attribution_model_v2.joblib  # 🤖 Trained classifier (v2 - best)
-├── author_label_encoder.joblib         # 🏷️ Author name ↔ class index (v1)
+├── pipeline_config.json                # ⚙️ Pipeline config (used by the app)
+├── pipeline_config_v2.json             # ⚙️ Pipeline config (v2)
+│
+├── author_attribution_model.joblib     # 🤖 Trained classifier (used by the app)
+├── author_attribution_model_v2.joblib  # 🤖 Trained classifier (v2)
+├── author_label_encoder.joblib         # 🏷️ Author name ↔ class index
 ├── author_label_encoder_v2.joblib      # 🏷️ Author name ↔ class index (v2)
-├── style_feature_selector.joblib       # 🔍 SelectKBest feature selector (v1)
-├── style_feature_selector_v2.joblib    # 🔍 SelectKBest feature selector (v2)
-├── style_scaler.joblib                 # 📊 Fitted StandardScaler (v1)
-├── style_scaler_v2.joblib              # 📊 Fitted StandardScaler (v2)
+├── stylo_feature_selector.joblib       # 🔍 SelectKBest feature selector
+├── stylo_feature_selector_v2.joblib    # 🔍 SelectKBest feature selector (v2)
+├── stylo_scaler.joblib                 # 📊 Fitted StandardScaler
+├── stylo_scaler_v2.joblib              # 📊 Fitted StandardScaler (v2)
 │
+├── .cache/                             # 🗃️ Cached chunk features from calibration (ignored by Git)
 └── .venv/                              # 🐍 Virtual environment (ignored by Git)
-    ├── Include/
-    ├── Lib/
-    ├── Scripts/
-    ├── share/
-    ├── .gitignore
-    └── pyvenv.cfg
 ```
 ## 📸 Live Demo Preview:
 <div align="center">
@@ -206,13 +245,11 @@ pip install streamlit plotly joblib numpy pandas scikit-learn sentence-transform
 ```
 
 ### 2. Get the dataset
-Either use the included `reuters_50_50.csv`, or regenerate it from raw folders:
-```bash
-python load_reuters_dataset.py --dataset_root /path/to/reuters_extracted --out reuters_50_50.csv
-```
+Use the included `reuters_50_50.csv`. If it's missing, the notebook falls back to reading the raw `C50train/` and `C50test/` folders from `reuters_extracted/`.
 
 ### 3. Run the notebook to train the pipeline
-Open `ShoiliChinno_fixed.ipynb` in Jupyter/Colab and **Run All** (top to bottom, fresh kernel). This will:
+The trained artifacts are already included, so you can skip this step unless you want to retrain.
+Open `ShoiliChinno.ipynb` in Jupyter/Colab and **Run All** (top to bottom, fresh kernel). This will:
 - Load and chunk the dataset
 - Extract stylometric features + embeddings
 - Train and tune the attribution models
@@ -221,7 +258,15 @@ Open `ShoiliChinno_fixed.ipynb` in Jupyter/Colab and **Run All** (top to bottom,
 
 > ⚠️ First run needs internet access — it downloads NLTK tokenizer data and the Sentence-BERT model weights. Both are cached locally afterward.
 
-### 4. Launch the app
+### 4. Recalibrate (only after retraining)
+The calibration files are included too. If you retrain the model, regenerate them so the thresholds match the new model:
+```bash
+python calibrate_style_shift.py   # a few minutes
+python calibrate_open_set.py      # ~20–30 min the first time (features are cached in .cache/ for reruns)
+```
+The app still runs without these files; the unknown-author check is then disabled and the style-change threshold falls back to an uncalibrated default.
+
+### 5. Launch the app
 Make sure the generated artifact files sit next to `app.py`, then:
 ```bash
 streamlit run app.py
@@ -233,7 +278,12 @@ Open the printed URL (usually `http://localhost:8501`).
 ## 🚀 Usage Guide
 
 ### Predict Author
-Paste any text (60+ words recommended) → get a ranked bar chart of the most likely authors with confidence scores.
+Paste any text (60+ words recommended; 150+ for the timeline) → get:
+- a verdict: **✅ top match**, **❓ no confident match**, or **🌐 outside what the model knows**
+- a ranked bar chart of the closest authors, with probabilities averaged over chunks
+- for texts over 150 words, a **style timeline**: a heatmap of which author each chunk resembles, a style-shift chart, and a table of segments when a style change is detected
+
+Use the **unknown-author strictness** slider to trade off between turning away genuine known-author texts and catching unknown writers; the caption under the result shows the measured error rates for the chosen setting.
 
 ### Verify Authorship
 Paste two texts → get a similarity gauge and a clear "same author / different author" verdict, with an adjustable threshold slider.
@@ -242,7 +292,7 @@ Paste two texts → get a similarity gauge and a clear "same author / different 
 Paste any text → see its raw stylistic fingerprint: top function words, POS balance, readability scores, and the full feature table — no model prediction needed, pure feature inspection.
 
 ### Batch Analysis
-Upload a CSV with a `text` column (optionally a `label` column for ground truth) → get predictions for every row, an accuracy score if labels are provided, and a downloadable results CSV.
+Upload a CSV with a `text` column (optionally a `label` column for ground truth) → get predictions for every row with its known-author check result, an accuracy score if labels are provided (overall and on rows that passed the check), and a downloadable results CSV.
 
 ---
 
@@ -263,8 +313,10 @@ Combined with **384-dimensional Sentence-BERT embeddings** for semantic/subtle s
 
 ## ⚠️ Known Limitations
 
-- Trained on **formal news writing** — informal text (chat, casual email) may behave differently until fine-tuned on that domain.
-- `LinearSVC` (the best-performing model in testing) has no native probability output — the app shows normalized decision scores for ranking, not calibrated probabilities.
+- Trained on **formal news writing** — informal text (chat, casual email) is usually flagged as "outside what the model knows" rather than attributed.
+- Catching an **unknown news writer** is only moderately reliable (~37% at default strictness): they share Reuters' house style with the known authors.
+- The unknown-author threshold was calibrated on a 40-author model and applied to the 50-author one, so its error rates are estimates.
+- **Style-change flags are leads, not proof** — ~14% of single-author texts get a false flag.
 - The verification threshold is tuned on the Reuters test-set similarity distribution; it may need recalibration for very different text types or lengths.
 - This is a research/portfolio demo, **not** a forensic or legally admissible authorship tool.
 - Short texts (under ~60 words) produce less reliable predictions, since the model was trained on chunks of that minimum length.
@@ -273,6 +325,10 @@ Combined with **384-dimensional Sentence-BERT embeddings** for semantic/subtle s
 
 ## 🗺️ Roadmap Ideas
 
+- [x] Chunk-level prediction with probability averaging
+- [x] Style-change timeline for mixed-authorship detection
+- [x] Unknown-author ("none of the above") detection with a domain check
+- [ ] Make verification style-based (e.g. Burrows' Delta) instead of embedding-only, which partly measures topic
 - [ ] Fine-tune on personal data (WhatsApp/email exports) for a truly personalized fingerprint
 - [ ] Replace cosine-similarity verification with a trained Siamese network for a learned similarity metric
 - [ ] Add SHAP/coefficient-based explainability — show *which* features drove a given prediction
