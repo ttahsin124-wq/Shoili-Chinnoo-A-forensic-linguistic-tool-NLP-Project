@@ -306,10 +306,10 @@ with st.sidebar:
         st.write(", ".join(sorted(label_encoder.classes_)))
 
 
-st.markdown("# ✍️ Writing Style Fingerprinting")
+st.markdown("# ✍️Linguistic Authorship Analysis")
 st.caption(
-    "Identify authors from writing style alone, verify whether two texts share an author, "
-    "and inspect the stylometric fingerprint of any piece of text."
+    "Identify authors from writing style alone, verify whether two texts share an author "
+    "and uncover the Linguistic Patterns and Authorship Signals Behind Any Text."
 )
 
 tab_predict, tab_verify, tab_profile, tab_batch, tab_about = st.tabs(
@@ -543,7 +543,7 @@ with tab_verify:
 
 
 with tab_profile:
-    st.markdown("### Inspect the stylometric fingerprint of any text")
+    st.markdown("### Analyze the Linguistic Patterns Behind Any Text")
     st.write("This shows the raw stylometric signals the model uses — independent of any prediction.")
 
     profile_text = st.text_area(
