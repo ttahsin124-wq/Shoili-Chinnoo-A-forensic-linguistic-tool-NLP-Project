@@ -1,0 +1,12 @@
+{
+  "threshold": 0.8236755166550126,
+  "percentile_of_same_author_shifts": 95,
+  "detection_rate_spliced_docs": 0.81,
+  "false_alarm_rate_single_author_docs": 0.14333333333333334,
+  "doc_length_words": 440,
+  "n_single_author_docs": 300,
+  "n_spliced_docs": 300,
+  "same_author_shift_median": 0.46248969697379644,
+  "spliced_max_shift_median": 0.9283159306040887,
+  "source": "Reuters C50 test split"
+}

@@ -1,6 +1,4 @@
 import json
-import re
-from collections import Counter
 from pathlib import Path
 import joblib
 import numpy as np
@@ -9,6 +7,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from sklearn.metrics.pairwise import cosine_similarity
+
+from pipeline import (
+    analyze_text, confidence_scores, domain_scores, extract_stylometric_features, find_segments,
+    top_authors,
+)
 
 st.set_page_config(
     page_title="ShoiliChinno — Writing Style Fingerprinting",
@@ -86,127 +89,10 @@ REQUIRED_FILES = {
     "model": "author_attribution_model.joblib",
     "config": "pipeline_config.json",
 }
-
-
-FUNCTION_WORDS = [
-    "the", "a", "an", "and", "but", "or", "so", "yet", "for", "nor",
-    "in", "on", "at", "by", "with", "about", "against", "between", "into",
-    "through", "during", "before", "after", "above", "below", "to", "from",
-    "up", "down", "of", "off", "over", "under",
-    "i", "you", "he", "she", "it", "we", "they", "this", "that", "these", "those",
-    "is", "am", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did",
-    "will", "would", "shall", "should", "can", "could", "may", "might", "must",
-    "not", "no", "very", "just", "only", "also", "however", "therefore",
-]
-PUNCT_CHARS = [".", ",", ";", ":", "!", "?", "-", '"', "'", "(", ")"]
-COMMON_TRIGRAMS = [
-    "ing", "the", "ent", "ion", "and", "for", "her", "his", "tha", "was",
-    "ere", "ate", "all", "you", "ear", "str", "men", "con", "pro",
-]
-
-
-@st.cache_resource(show_spinner=False)
-def get_nltk_ready():
-    """Download NLTK data once, quietly. Requires internet on first run."""
-    import nltk
-    for pkg in ["punkt", "punkt_tab", "averaged_perceptron_tagger", "averaged_perceptron_tagger_eng"]:
-        try:
-            nltk.download(pkg, quiet=True)
-        except Exception:
-            pass
-    return True
-
-
-def extract_stylometric_features(text: str) -> dict:
-    get_nltk_ready()
-    from nltk import word_tokenize, sent_tokenize, pos_tag
-
-    try:
-        import textstat
-        has_textstat = True
-    except ImportError:
-        has_textstat = False
-
-    words = word_tokenize(text)
-    words_lower = [w.lower() for w in words if w.isalpha()]
-    sentences = sent_tokenize(text)
-
-    n_words = max(len(words_lower), 1)
-    n_sentences = max(len(sentences), 1)
-    sentence_lengths = [len(word_tokenize(sent)) for sent in sentences]
-
-    features = {}
-    features["avg_sentence_length"] = n_words / n_sentences
-    features["avg_word_length"] = np.mean([len(w) for w in words_lower]) if words_lower else 0
-    features["type_token_ratio"] = len(set(words_lower)) / n_words
-    features["sentence_length_std"] = np.std(sentence_lengths) if sentence_lengths else 0
-
-    for p in PUNCT_CHARS:
-        features[f"punct_{p}"] = (text.count(p) / n_words) * 100
-    features["punct_ellipsis"] = (text.count("...") / n_words) * 100
-    features["punct_emdash"] = (text.count("—") / n_words) * 100
-
-    word_counts = Counter(words_lower)
-    for fw in FUNCTION_WORDS:
-        features[f"fw_{fw}"] = (word_counts.get(fw, 0) / n_words) * 100
-
-    try:
-        tags = pos_tag(words)
-        tag_counts = Counter(tag for _, tag in tags)
-        total_tags = max(sum(tag_counts.values()), 1)
-        pos_groups = {
-            "pos_noun": ["NN", "NNS", "NNP", "NNPS"],
-            "pos_verb": ["VB", "VBD", "VBG", "VBN", "VBP", "VBZ"],
-            "pos_adj": ["JJ", "JJR", "JJS"],
-            "pos_adv": ["RB", "RBR", "RBS"],
-            "pos_pron": ["PRP", "PRP$"],
-        }
-        for group_name, tag_list in pos_groups.items():
-            features[group_name] = sum(tag_counts.get(t, 0) for t in tag_list) / total_tags
-    except Exception:
-        for group_name in ["pos_noun", "pos_verb", "pos_adj", "pos_adv", "pos_pron"]:
-            features[group_name] = 0.0
-
-    features["avg_word_length_std"] = np.std([len(w) for w in words_lower]) if words_lower else 0
-    features["capitalized_word_ratio"] = sum(1 for w in words if w.istitle()) / n_words
-    features["uppercase_word_ratio"] = sum(1 for w in words if w.isupper() and len(w) > 1) / n_words
-
-    if has_textstat:
-        try:
-            features["flesch_reading_ease"] = textstat.flesch_reading_ease(text)
-            features["flesch_kincaid_grade"] = textstat.flesch_kincaid_grade(text)
-            features["gunning_fog"] = textstat.gunning_fog(text)
-            features["smog_index"] = textstat.smog_index(text)
-            features["avg_syllables_per_word"] = textstat.avg_syllables_per_word(text)
-        except Exception:
-            has_textstat = False
-    if not has_textstat:
-        avg_word_len = features["avg_word_length"]
-        avg_sent_len = features["avg_sentence_length"]
-        est_syllables = 1 + avg_word_len / 4
-        flesch = 206.835 - 1.015 * avg_sent_len - 84.6 * est_syllables
-        flesch_kincaid = 0.39 * avg_sent_len + 11.8 * est_syllables - 15.59
-        features["flesch_reading_ease"] = max(0, min(100, flesch))
-        features["flesch_kincaid_grade"] = max(0, flesch_kincaid)
-        features["gunning_fog"] = 0.4 * (avg_sent_len + 100 * (1 - features["type_token_ratio"]))
-        features["smog_index"] = 1.043 * np.sqrt(max(0, 30 * (1 - features["type_token_ratio"])) + 3.1291)
-        features["avg_syllables_per_word"] = est_syllables
-
-    clean = re.sub(r"[^a-zA-Z]", " ", text).lower()
-    trigram_counts = {}
-    for i in range(len(clean) - 2):
-        tri = clean[i:i + 3]
-        if " " not in tri:
-            trigram_counts[tri] = trigram_counts.get(tri, 0) + 1
-    for tri in COMMON_TRIGRAMS:
-        features[f"tri_{tri}"] = (trigram_counts.get(tri, 0) / n_words) * 100
-
-    stopwords = set(FUNCTION_WORDS)
-    features["stopword_ratio"] = sum(1 for w in words_lower if w in stopwords) / n_words
-
-    return features
-
+CALIBRATION_FILE = "style_shift_calibration.json"
+OPEN_SET_FILE = "open_set_calibration.json"
+DOMAIN_CENTROIDS_FILE = "domain_centroids.npy"
+DEFAULT_SHIFT_THRESHOLD = 0.8  # used only if calibrate_style_shift.py hasn't been run
 
 
 def missing_files():
@@ -230,35 +116,51 @@ def load_embedder(model_name: str):
     return SentenceTransformer(model_name)
 
 
-def featurize_text(text: str, scaler, selector, label_encoder, config, embedder) -> np.ndarray:
-    stylo = extract_stylometric_features(text)
-    columns = config.get("stylometric_feature_columns")
-    if columns is None:
-        
-        columns = list(stylo.keys())
-    stylo_vec = np.array([[stylo.get(col, 0.0) for col in columns]])
-    stylo_scaled = scaler.transform(stylo_vec)
-    stylo_selected = selector.transform(stylo_scaled)
-    emb = embedder.encode([text], convert_to_numpy=True)
-    return np.hstack([stylo_selected, emb])
+@st.cache_data(show_spinner=False)
+def load_shift_calibration():
+    path = ARTIFACT_DIR / CALIBRATION_FILE
+    if not path.exists():
+        return None
+    with open(path) as f:
+        return json.load(f)
 
 
-def predict_author(text: str, scaler, selector, label_encoder, model, config, embedder, top_k: int = 5):
-    vec = featurize_text(text, scaler, selector, label_encoder, config, embedder)
-    if hasattr(model, "predict_proba"):
-        proba = model.predict_proba(vec)[0]
-        top_idx = np.argsort(proba)[::-1][:top_k]
-        kind = "probability"
-        return [(label_encoder.inverse_transform([i])[0], float(proba[i])) for i in top_idx], kind
-    elif hasattr(model, "decision_function"):
-        scores = model.decision_function(vec)[0]
-        s_min, s_max = scores.min(), scores.max()
-        norm = (scores - s_min) / (s_max - s_min + 1e-9)
-        top_idx = np.argsort(scores)[::-1][:top_k]
-        kind = "score"
-        return [(label_encoder.inverse_transform([i])[0], float(norm[i])) for i in top_idx], kind
-    pred = model.predict(vec)[0]
-    return [(label_encoder.inverse_transform([pred])[0], None)], "label_only"
+@st.cache_resource(show_spinner=False)
+def load_open_set_calibration():
+    path = ARTIFACT_DIR / OPEN_SET_FILE
+    if not path.exists():
+        return None
+    with open(path) as f:
+        calib = json.load(f)
+    centroids_path = ARTIFACT_DIR / DOMAIN_CENTROIDS_FILE
+    calib["centroids"] = np.load(centroids_path) if centroids_path.exists() else None
+    return calib
+
+
+def open_set_point(calib: dict, keep_rate: float) -> dict:
+    return min(calib["operating_points"], key=lambda p: abs(p["keep_rate_known"] - keep_rate))
+
+
+def known_author_check(analysis: dict, calib: dict, point: dict) -> dict:
+    """Two-stage open-set check.
+
+    status: "out_of_domain" (text unlike the training data — no attribution attempted),
+            "no_match"      (in domain, but no known author fits strongly enough),
+            "match", or None when no calibration is available.
+    """
+    if not calib or analysis["kind"] == "vote":
+        return {"status": None}
+    out = {"confidence": confidence_scores(analysis["doc_probs"])[calib["score"]]}
+    dom_cfg = calib.get("domain_check")
+    if dom_cfg and calib.get("centroids") is not None:
+        dom = domain_scores(analysis["features"], dom_cfg["n_stylometric_features"], calib["centroids"])
+        out.update(dom)
+        if (dom["news_similarity"] < dom_cfg["news_similarity_min"]
+                or dom["style_unusualness"] > dom_cfg["style_unusualness_max"]):
+            out["status"] = "out_of_domain"
+            return out
+    out["status"] = "match" if out["confidence"] >= point["threshold"] else "no_match"
+    return out
 
 
 def verify_authorship(text_a: str, text_b: str, config, embedder, threshold: float = None):
@@ -277,7 +179,94 @@ def word_count(text: str) -> int:
     return len(text.split())
 
 
-MIN_RECOMMENDED_WORDS = 60 
+MIN_RECOMMENDED_WORDS = 60
+CHART_LAYOUT = dict(plot_bgcolor="#0E1117", paper_bgcolor="#0E1117", font_color="#E6E6E6")
+
+
+def render_style_timeline(result: dict, top_k: int):
+    """Per-chunk attribution heatmap + style-shift line, with segments split at large shifts."""
+    chunks, probs, shifts = result["chunks"], result["chunk_probs"], result["shifts"]
+    authors = result["authors"]
+    calib = load_shift_calibration()
+    threshold = calib["threshold"] if calib else DEFAULT_SHIFT_THRESHOLD
+
+    st.markdown("#### 🧭 Style timeline")
+    st.caption(
+        f"The text was split into {len(chunks)} overlapping chunks of "
+        f"~{config.get('chunk_size_words', 150)} words (the size the model was trained on). "
+        f"{result['agreement']*100:.0f}% of chunks agree with the overall top match."
+    )
+
+    labels = [f"#{i+1}<br>w{s+1}–{e}" for i, (s, e, _) in enumerate(chunks)]
+    shown_idx = np.argsort(result["doc_probs"])[::-1][:top_k]
+    heat = probs[:, shown_idx].T
+    fig = go.Figure(go.Heatmap(
+        z=heat, x=labels, y=[authors[i] for i in shown_idx],
+        colorscale="Purples", zmin=0, zmax=max(float(heat.max()), 1e-6),
+        hovertemplate="Chunk %{x}<br>%{y}: %{z:.1%}<extra></extra>",
+        colorbar=dict(title="P", tickformat=".0%"),
+    ))
+    fig.update_layout(**CHART_LAYOUT, height=90 + 32 * len(shown_idx),
+                      margin=dict(l=10, r=10, t=10, b=10), yaxis_autorange="reversed")
+    st.plotly_chart(fig, use_container_width=True)
+
+    mids = [f"#{i+1}→#{i+2}" for i in range(len(shifts))]
+    fig_s = go.Figure()
+    fig_s.add_trace(go.Scatter(
+        x=mids, y=shifts, mode="lines+markers", line=dict(color="#6C63FF"),
+        marker=dict(size=9, color=["#ae3f3f" if s >= threshold else "#6C63FF" for s in shifts]),
+        hovertemplate="%{x}: shift %{y:.2f}<extra></extra>", name="Style shift",
+    ))
+    fig_s.add_hline(y=threshold, line_dash="dash", line_color="#ae3f3f",
+                    annotation_text="change threshold", annotation_font_color="#E6E6E6")
+    fig_s.update_layout(**CHART_LAYOUT, height=220, margin=dict(l=10, r=10, t=10, b=10),
+                        yaxis=dict(range=[0, 1], title="Shift"), showlegend=False)
+    st.plotly_chart(fig_s, use_container_width=True)
+
+    segments = find_segments(probs, shifts, threshold)
+    if len(segments) == 1:
+        st.success("No strong style change detected — the text reads as consistent throughout.")
+    else:
+        st.warning(
+            f"⚠️ {len(segments) - 1} possible style change(s) detected. The text may combine "
+            f"writing from more than one person, or contain an inserted or edited passage."
+        )
+        seg_rows = []
+        for n, (a, b, mean_p) in enumerate(segments, 1):
+            best = int(mean_p.argmax())
+            seg_rows.append({
+                "Segment": n,
+                "Chunks": f"#{a+1}–#{b+1}" if a != b else f"#{a+1}",
+                "Words": f"{chunks[a][0]+1}–{chunks[b][1]}",
+                "Closest author": authors[best],
+                "Confidence": f"{mean_p[best]*100:.1f}%",
+                "Starts with": " ".join(chunks[a][2].split()[:12]) + "…",
+            })
+        st.dataframe(pd.DataFrame(seg_rows), use_container_width=True, hide_index=True)
+
+    if calib:
+        st.caption(
+            f"Shift = Jensen–Shannon distance between neighbouring chunks' author distributions. "
+            f"Threshold {threshold:.2f} = {calib['percentile_of_same_author_shifts']}th percentile of "
+            f"shifts inside single-author Reuters test articles. On {calib['doc_length_words']}-word test "
+            f"documents it caught {calib['detection_rate_spliced_docs']*100:.0f}% of two-author splices and "
+            f"raised a false alarm on {calib['false_alarm_rate_single_author_docs']*100:.0f}% of "
+            f"single-author texts — treat flags as leads to investigate, not proof."
+        )
+    else:
+        st.caption(f"⚠️ Uncalibrated threshold ({threshold}). Run `calibrate_style_shift.py` to calibrate it.")
+
+    with st.expander("📄 Per-chunk predictions"):
+        rows = []
+        for i, (s, e, txt) in enumerate(chunks):
+            best = int(probs[i].argmax())
+            rows.append({
+                "Chunk": i + 1, "Words": f"{s+1}–{e}",
+                "Top author": authors[best], "Confidence": f"{probs[i, best]*100:.1f}%",
+                "Shift from previous": "" if i == 0 else f"{shifts[i-1]:.2f}",
+                "Preview": " ".join(txt.split()[:15]) + "…",
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
 
@@ -346,6 +335,21 @@ with tab_predict:
         )
     with col_settings:
         top_k = st.slider("Show top N authors", min_value=1, max_value=10, value=5)
+        open_calib = load_open_set_calibration()
+        if open_calib:
+            keep_options = sorted((p["keep_rate_known"] for p in open_calib["operating_points"]), reverse=True)
+            keep_rate = st.select_slider(
+                "Unknown-author strictness",
+                options=keep_options,
+                value=min(keep_options, key=lambda k: abs(k - open_calib["default_keep_rate"])),
+                format_func=lambda k: f"{(1 - k) * 100:.0f}%",
+                help="Higher = more willing to answer 'none of the known authors'. "
+                     "The value is the share of genuine known-author texts that would be "
+                     "turned away, measured on held-out test articles.",
+            )
+            open_point = open_set_point(open_calib, keep_rate)
+        else:
+            open_point = None
         st.write("")
         run_predict = st.button("🔮 Predict Author", use_container_width=True)
 
@@ -362,23 +366,56 @@ with tab_predict:
             st.error("Please paste some text first.")
         else:
             with st.spinner("Analyzing writing style..."):
-                results, kind = predict_author(
-                    predict_text, scaler, selector, label_encoder, model, config, embedder, top_k=top_k
+                analysis = analyze_text(
+                    predict_text, scaler, selector, label_encoder, model, config, embedder
                 )
+            results, kind = top_authors(analysis, top_k), analysis["kind"]
+            n_chunks = len(analysis["chunks"])
 
-            if kind == "label_only":
+            if kind == "vote":
                 st.info(f"**Predicted author:** {results[0][0]}")
             else:
                 label_name = "Probability" if kind == "probability" else "Relative confidence"
                 df_res = pd.DataFrame(results, columns=["Author", label_name])
 
-                st.markdown(
-                    f'<div class="fingerprint-card">'
-                    f'<h4 style="margin-top:0">Top match: {results[0][0]}</h4>'
-                    f'<p style="color:#9a9ab0;margin-bottom:0">'
-                    f'{label_name}: {results[0][1]*100:.1f}%</p></div>',
-                    unsafe_allow_html=True,
-                )
+                basis = (f"averaged over {n_chunks} chunks" if n_chunks > 1 else "single chunk")
+                check = known_author_check(analysis, open_calib, open_point)
+                status = check["status"]
+                if status == "out_of_domain":
+                    st.markdown(
+                        f'<div class="verdict-diff">'
+                        f'<h4 style="margin-top:0">🌐 This text is outside what the model knows</h4>'
+                        f'<p style="margin-bottom:0">Its content and style are very different from the '
+                        f'Reuters news articles the model was trained on, so it can\'t reliably say '
+                        f'whether any of the {len(label_encoder.classes_)} known authors wrote it — '
+                        f'and most likely none of them did. The ranking below is shown for '
+                        f'reference only.</p></div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.write("")
+                    st.markdown("**Closest known authors** (not a reliable attribution)")
+                elif status == "no_match":
+                    st.markdown(
+                        f'<div class="verdict-diff">'
+                        f'<h4 style="margin-top:0">❓ No confident match among the '
+                        f'{len(label_encoder.classes_)} known authors</h4>'
+                        f'<p style="margin-bottom:0">The writing style doesn\'t fit any known author '
+                        f'strongly enough — it may be by someone the model has never seen. '
+                        f'Closest: <b>{results[0][0]}</b> ({label_name.lower()} '
+                        f'{results[0][1]*100:.1f}%, {basis}).</p></div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.write("")
+                    st.markdown("**Closest known authors** (none passed the known-author check)")
+                else:
+                    passed = " · ✅ passes known-author check" if status == "match" else ""
+                    st.markdown(
+                        f'<div class="fingerprint-card">'
+                        f'<h4 style="margin-top:0">Top match: {results[0][0]}</h4>'
+                        f'<p style="color:#9a9ab0;margin-bottom:0">'
+                        f'{label_name}: {results[0][1]*100:.1f}% ({basis}){passed}</p></div>',
+                        unsafe_allow_html=True,
+                    )
 
                 fig = px.bar(
                     df_res.sort_values(label_name),
@@ -398,6 +435,37 @@ with tab_predict:
                         "ℹ️ This model (Linear SVM) doesn't output true probabilities — bars show "
                         "normalized decision scores for relative ranking, not calibrated confidence."
                     )
+
+                if status == "out_of_domain":
+                    dom_cfg = open_calib["domain_check"]
+                    st.caption(
+                        f"Domain check: similarity to the training material = {check['news_similarity']:.3f} "
+                        f"(minimum {dom_cfg['news_similarity_min']:.3f}); style unusualness = "
+                        f"{check['style_unusualness']:.2f} (maximum {dom_cfg['style_unusualness_max']:.2f}). "
+                        f"Only {dom_cfg['reuters_rejected']*100:.0f}% of real Reuters test articles fail this check."
+                    )
+                elif status is not None:
+                    score_name = {"max_prob": "top probability", "margin": "gap between top two authors"}
+                    st.caption(
+                        f"Known-author check: {score_name.get(open_calib['score'], open_calib['score'])} = "
+                        f"{check['confidence']:.3f} vs threshold {open_point['threshold']:.3f}. In a simulation where 10 "
+                        f"authors were hidden from the model, this setting turned away "
+                        f"{open_point['unknown_rejected']*100:.0f}% of texts by unseen authors and "
+                        f"{(1 - open_point['keep_rate_known'])*100:.0f}% of texts by known ones; answers "
+                        f"that passed were {open_point['accuracy_when_accepted']*100:.0f}% correct "
+                        f"(vs {open_calib['accuracy_without_rejection']*100:.0f}% with no check)."
+                    )
+                elif open_calib is None:
+                    st.caption("⚠️ Known-author check unavailable — run `calibrate_open_set.py` to enable it.")
+
+            if n_chunks > 1:
+                st.divider()
+                render_style_timeline(analysis, top_k)
+            else:
+                st.caption(
+                    f"💡 Paste more than {config.get('chunk_size_words', 150)} words to get a "
+                    f"chunk-by-chunk style timeline that can flag mixed authorship."
+                )
 
 
 with tab_verify:
@@ -562,13 +630,20 @@ with tab_batch:
                     for i, (_, row) in enumerate(subset.iterrows()):
                         text = str(row["text"])
                         try:
-                            preds, kind = predict_author(
-                                text, scaler, selector, label_encoder, model, config, embedder, top_k=1
+                            analysis = analyze_text(
+                                text, scaler, selector, label_encoder, model, config, embedder
                             )
-                            pred_author, score = preds[0]
+                            pred_author, score = top_authors(analysis, 1)[0]
+                            status = known_author_check(analysis, open_calib, open_point)["status"]
                         except Exception as e:
-                            pred_author, score = f"ERROR: {e}", None
+                            pred_author, score, status = f"ERROR: {e}", None, None
                         result_row = {"text_preview": text[:80] + ("..." if len(text) > 80 else ""), "predicted_author": pred_author}
+                        result_row["confidence"] = score
+                        if status is not None:
+                            result_row["known_author_check"] = {
+                                "match": "pass", "no_match": "no confident match",
+                                "out_of_domain": "outside training domain",
+                            }[status]
                         if "label" in batch_df.columns:
                             result_row["true_author"] = row["label"]
                             result_row["correct"] = (row["label"] == pred_author)
@@ -581,7 +656,16 @@ with tab_batch:
 
                     if "correct" in results_df.columns:
                         acc = results_df["correct"].mean()
-                        st.metric("Batch accuracy", f"{acc*100:.1f}%")
+                        m1, m2, m3 = st.columns(3)
+                        m1.metric("Batch accuracy (top match)", f"{acc*100:.1f}%")
+                        if "known_author_check" in results_df.columns:
+                            passed = results_df["known_author_check"] == "pass"
+                            m2.metric("Passed known-author check", f"{passed.mean()*100:.0f}%")
+                            if passed.any():
+                                m3.metric("Accuracy on passed rows", f"{results_df.loc[passed, 'correct'].mean()*100:.1f}%")
+                    elif "known_author_check" in results_df.columns:
+                        passed = results_df["known_author_check"] == "pass"
+                        st.metric("Passed known-author check", f"{passed.mean()*100:.0f}%")
 
                     csv_bytes = results_df.to_csv(index=False).encode("utf-8")
                     st.download_button(
@@ -602,9 +686,15 @@ they write, not *what* they write about. It combines two signal types:
 - **Semantic embeddings** — dense sentence representations from a pretrained transformer,
   capturing subtler stylistic patterns handcrafted rules miss.
 
-#### Two capabilities
+#### Capabilities
 1. **Author Attribution** — given text, rank which of the known authors most likely wrote it.
-2. **Author Verification** — given two texts, estimate whether they share an author, using
+   Long texts are split into 150-word chunks (as in training) and chunk predictions are averaged.
+2. **Unknown-author detection** — if the style doesn't fit any known author strongly enough,
+   the app says "no confident match" instead of forcing a guess. Calibrated by hiding 10
+   authors from a retrained copy of the model and checking it rejects them.
+3. **Style-change timeline** — flags points in a long text where the writing style shifts,
+   which can indicate mixed authorship or an inserted passage.
+4. **Author Verification** — given two texts, estimate whether they share an author, using
    cosine similarity between style embeddings and a threshold tuned via ROC analysis.
 
 #### Model details
@@ -618,5 +708,11 @@ they write, not *what* they write about. It combines two signal types:
 #### Honest limitations
 - Trained on news-style writing (Reuters articles) — informal writing (chat, email) may perform differently.
 - Verification threshold is tuned on the test set distribution; it may need recalibration for very different text types.
+- Unknown-author detection is only moderately reliable when the unknown writer is another news
+  journalist (the simulation caught roughly a third to a half of them, depending on strictness). Text that
+  is clearly not news writing (blogs, fiction, email, academic prose) is caught by a separate domain check.
+- The unknown-author threshold was calibrated with a 40-author model and applied to the 50-author one,
+  so its error rates are estimates.
+- Style-change flags are leads to investigate, not proof — single-author texts are sometimes flagged too.
 - This is a demo/portfolio project, not a forensic or legal authorship tool.
 """)

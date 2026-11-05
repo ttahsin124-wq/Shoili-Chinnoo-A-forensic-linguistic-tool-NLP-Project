@@ -1,0 +1,56 @@
+{
+  "domain_check": {
+    "news_similarity_min": 0.316313352968461,
+    "style_unusualness_max": 1.1129356068687788,
+    "n_stylometric_features": 40,
+    "reuters_rejected": 0.02
+  },
+  "score": "max_prob",
+  "auroc": {
+    "max_prob": 0.70719456,
+    "margin": 0.6768874
+  },
+  "default_keep_rate": 0.85,
+  "operating_points": [
+    {
+      "keep_rate_known": 0.7,
+      "threshold": 0.4622628766604034,
+      "unknown_rejected": 0.596,
+      "accuracy_when_accepted": 0.8242857142857143
+    },
+    {
+      "keep_rate_known": 0.75,
+      "threshold": 0.4249948533544063,
+      "unknown_rejected": 0.5232,
+      "accuracy_when_accepted": 0.8056
+    },
+    {
+      "keep_rate_known": 0.8,
+      "threshold": 0.38751373269959827,
+      "unknown_rejected": 0.4492,
+      "accuracy_when_accepted": 0.786125
+    },
+    {
+      "keep_rate_known": 0.85,
+      "threshold": 0.35132108510467225,
+      "unknown_rejected": 0.3684,
+      "accuracy_when_accepted": 0.7652941176470588
+    },
+    {
+      "keep_rate_known": 0.9,
+      "threshold": 0.309413367858043,
+      "unknown_rejected": 0.2692,
+      "accuracy_when_accepted": 0.741
+    },
+    {
+      "keep_rate_known": 0.95,
+      "threshold": 0.26228624842900616,
+      "unknown_rejected": 0.1712,
+      "accuracy_when_accepted": 0.7196842105263158
+    }
+  ],
+  "accuracy_without_rejection": 0.6957,
+  "n_folds": 5,
+  "authors_held_out_per_fold": 10,
+  "source": "Reuters C50 test split, leave-10-authors-out"
+}
